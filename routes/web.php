@@ -1,0 +1,106 @@
+<?php
+
+use App\Http\Controllers\Auth\ForgotPasswordController;
+use App\Http\Controllers\Auth\LoginController;
+use App\Http\Controllers\Auth\RegisterController;
+use App\Http\Controllers\Auth\ResetPasswordController;
+use App\Http\Controllers\BudgetChatController;
+use App\Http\Controllers\BudgetController;
+use App\Http\Controllers\ExpenseController;
+use App\Http\Controllers\LogoutController;
+use App\Http\Controllers\SubscriptionCheckoutController;
+use App\Http\Controllers\SubscriptionController;
+use App\Http\Controllers\TicketScanController;
+use App\Http\Controllers\UpdatePasswordController;
+use App\Http\Controllers\UpdateProfileController;
+use Illuminate\Foundation\Auth\EmailVerificationRequest;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Route;
+use Inertia\Inertia;
+
+Route::get('/', function () {
+    return view('home');
+})->name('home');
+
+Route::get('/auth/register', [RegisterController::class, 'index'])->name('register');
+Route::post('/auth/register', [RegisterController::class, 'store'])->name('register.store');
+
+Route::get('/auth/login', [LoginController::class, 'index'])->name('login');
+Route::post('/auth/login', [LoginController::class, 'store'])->name('login.store');
+
+Route::post('/auth/logout', [LogoutController::class, 'store'])->name('logout.store');
+
+Route::get('/auth/forgot-password', [ForgotPasswordController::class, 'index'])->name('password.request');
+Route::post('/auth/forgot-password', [ForgotPasswordController::class, 'store'])->name('password.email');
+
+Route::get('/auth/reset-password/{token}', [ResetPasswordController::class, 'index'])->name('password.reset');
+Route::post('/auth/reset-password', [ResetPasswordController::class, 'store'])->name('password.update');
+
+Route::get('/email/verify/{id}/{hash}', function(EmailVerificationRequest $request) {
+    $request->fulfill();
+    return redirect()->route('dashboard')->with('success', 'Tu correo fue verificado correctamente. Ya puedes crear presupuestos y gastos.');
+})->middleware(['auth','signed'])->name('verification.verify');
+
+Route::get('/email/verify', function() {
+    return view('auth.verify-email');
+})->middleware('auth')->name('verification.notice');
+
+Route::post('/email/verification-notification', function(Request $request) {
+    $request->user()->sendEmailVerificationNotification();
+    return back()->with('success', 'Se ha reenviado el correo de verificación');
+})->middleware(['auth','throttle:1,1'])->name('verification.send');
+
+
+Route::middleware(['auth', 'verified'])->prefix('/dashboard')->group(function() {
+    Route::get('/', [BudgetController::class, 'index'])->name('dashboard');
+    Route::get('/budgets/create', [BudgetController::class, 'create'])->name('budgets.create');
+    Route::post('/budgets', [BudgetController::class, 'store'])->name('budgets.store');
+    Route::get('/budgets/{budget}', [BudgetController::class, 'show'])->name('budgets.show');
+    Route::get('/budgets/{budget}/edit', [BudgetController::class, 'edit'])->name('budgets.edit');
+    Route::put('/budgets/{budget}', [BudgetController::class, 'update'])->name('budgets.update');
+    Route::delete('/budgets/{budget}', [BudgetController::class, 'destroy'])->name('budgets.destroy');
+    Route::post('/budgets/{budget}/expenses', [ExpenseController::class, 'store'])->name('expenses.store');
+    Route::put('/budgets/{budget}/expenses/{expense}', [ExpenseController::class, 'update'])->name('expenses.update');
+    Route::delete('/budgets/{budget}/expenses/{expense}', [ExpenseController::class, 'destroy'])->name('expenses.destroy');
+
+    Route::get('/settings/profile', [UpdateProfileController::class, 'edit'])->name('settings.profile');
+    Route::put('/settings/profile', [UpdateProfileController::class, 'update'])->name('settings.profile.update');
+    Route::get('/settings/password', [UpdatePasswordController::class, 'edit'])->name('settings.password');
+    Route::put('/settings/password', [UpdatePasswordController::class, 'update'])->name('settings.password.update');
+});
+
+Route::middleware(['auth','verified','subscribed'])->group(function() {
+    Route::post('/budgets/{budget}/chat', [BudgetChatController::class, 'store'])->name('budgets.chat');
+    Route::post('/budgets/{budget}/scan-ticket', [TicketScanController::class, 'store'])->name('budgets.scan-ticket');
+});
+
+Route::middleware(['auth', 'verified'])->group(function() {
+    Route::post('/subscription-checkout/{plan}',[SubscriptionCheckoutController::class, 'store'])
+        ->name('subscription.checkout')
+        ->whereIn('plan', ['monthly','yearly']);
+
+
+    Route::view('/billing/success','billing.success')->name('billing.success');
+    Route::view('/billing/cancel','billing.cancel')->name('billing.cancel');
+
+    Route::get('/plans', function() {
+        return Inertia::render('Pro/Plans');
+    })->name('plans');
+
+    Route::get('/subscription', [SubscriptionController::class, 'show'])
+        ->name('subscription.manage');
+
+    Route::post('/subscription/swap/{plan}', [SubscriptionController::class, 'swap'])
+        ->name('subscription.swap')
+        ->whereIn('plan', ['monthly', 'yearly']);
+
+    Route::post('/subscription/cancel', [SubscriptionController::class, 'cancel'])
+        ->name('subscription.cancel');
+
+    Route::post('/subscription/resume', [SubscriptionController::class, 'resume'])
+        ->name('subscription.resume');
+
+    Route::get('/billing', function(Request $request) {
+        return $request->user()->redirectToBillingPortal(route('dashboard'));
+    })->name('billing');
+});

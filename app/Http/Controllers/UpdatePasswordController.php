@@ -1,0 +1,23 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Http\Requests\UpdatePasswordRequest;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Inertia\Inertia;
+
+class UpdatePasswordController extends Controller
+{
+    public function edit() 
+    {
+        return Inertia::render('Settings/UpdatePassword');
+    }
+    
+    public function update(UpdatePasswordRequest $request) 
+    {
+        $user = Auth::user();
+        $user->updated($request->validated());
+        return back()->with('success', 'Password actualizado correctamente');
+    }
+}
